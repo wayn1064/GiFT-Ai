@@ -1,0 +1,109 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ----------------------------------------------------------------------
+// 1. Tenant (Multi-tenant support based on hospitalId or cafeId)
+// ----------------------------------------------------------------------
+model Tenant {
+  id          String     @id @default(uuid())
+  code        String     @unique // e.g., WAYN-HOSP-001
+  name        String
+  region      String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  users       User[]
+  products    Product[]
+  orders      Order[]
+  approvals   Approval[]
+}
+
+// ----------------------------------------------------------------------
+// 2. User & Roles (Identity Platform Simulation)
+// ----------------------------------------------------------------------
+model User {
+  id          String     @id @default(uuid())
+  tenantId    String
+  email       String     @unique
+  password    String
+  name        String
+  role        String     @default("USER") // ADMIN, MANAGER, USER
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  tenant      Tenant     @relation(fields: [tenantId], references: [id])
+  orders      Order[]    @relation("UserOrders")
+  approvals   Approval[] @relation("UserApprovals")
+}
+
+// ----------------------------------------------------------------------
+// 3. Product (GiFT-Ai Promotional items)
+// ----------------------------------------------------------------------
+model Product {
+  id            String   @id @default(uuid())
+  tenantId      String
+  name          String
+  category      String
+  brand         String?
+  price         Int
+  originalPrice Int?
+  discountRate  Int?
+  imageUrl      String?
+  isSoldOut     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  OrderItems    OrderItem[]
+}
+
+// ----------------------------------------------------------------------
+// 4. Order (Shopping Cart & Purchases)
+// ----------------------------------------------------------------------
+model Order {
+  id          String      @id @default(uuid())
+  tenantId    String
+  userId      String
+  totalAmount Int
+  status      String      @default("PENDING") // PENDING, APPROVED, SHIPPED, DELIVERED
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id])
+  user        User        @relation("UserOrders", fields: [userId], references: [id])
+  items       OrderItem[]
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  productId String
+  quantity  Int
+  price     Int
+
+  order     Order   @relation(fields: [orderId], references: [id])
+  product   Product @relation(fields: [productId], references: [id])
+}
+
+// ----------------------------------------------------------------------
+// 5. Approval (Centralized Event-Driven Workflow)
+// ----------------------------------------------------------------------
+model Approval {
+  id           String   @id @default(uuid())
+  tenantId     String
+  requesterId  String
+  targetType   String   // e.g., "ORDER", "LEAVE", "EXPENSE"
+  targetId     String   // The ID of the related record (e.g., Order ID)
+  status       String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  remarks      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  requester    User     @relation("UserApprovals", fields: [requesterId], references: [id])
+}
